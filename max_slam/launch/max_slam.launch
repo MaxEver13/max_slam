@@ -1,0 +1,19 @@
+<launch>
+    <arg name="lidar_frame_id" default="map"/>
+    <arg name="imu_frame_id" default="imu_link"/>
+    <arg name="world_frame_id" default="map"/>
+
+    
+    <!--地面点云分割节点-->
+    <node pkg="max_slam" type="ground_seg_node" name="ground_seg_node" output="screen">
+        <rosparam command="load" file="$(find max_slam)/config/segmentation_params.yaml"/>
+        <param name="input_topic" value="/points_raw" />  <!--修改了tpoic的名称/kitti/velo/pointcloud，使其可以读取velodyne的数据 -->
+        <param name="ground_output_topic" value="/ground_cloud" />
+        <param name="obstacle_output_topic" value="/obstacle_cloud" />
+        <param name="lidar_frame_id" value="$(arg lidar_frame_id)" type="string"/>
+    </node>
+
+
+
+    <node pkg="rviz" type="rviz" name="rviz" output="screen" args="-d $(find max_slam)/rviz/max_slam.rviz"/>
+</launch>
