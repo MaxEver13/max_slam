@@ -1,10 +1,6 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(linefit_ground_segmentation)
 
-# find_package(catkin_simple 0.1.0 REQUIRED )
-
-# catkin_simple(ALL_DEPS_REQUIRED)
-
 add_definitions(-std=c++11 -g)
 
 set(CMAKE_BUILD_TYPE "RELEASE")

@@ -4,11 +4,11 @@
  * @Author: Jiawen Ji
  * @Date: 2021-09-06 14:57:02
  * @LastEditors: Jiawen Ji
- * @LastEditTime: 2021-09-10 17:52:30
+ * @LastEditTime: 2021-09-13 17:49:39
  */
 
-#ifndef SRC_MAX_MAPPING_SRC_GROUND_SEGMENTATION_NODE_H_
-#define SRC_MAX_MAPPING_SRC_GROUND_SEGMENTATION_NODE_H_
+#ifndef SRC_MAX_MAPPING_SRC_GROUND_SEGMENTATION_H_
+#define SRC_MAX_MAPPING_SRC_GROUND_SEGMENTATION_H_
 
 #include <ros/ros.h>
 #include <iostream>
@@ -29,10 +29,10 @@
 #include "ground_segmentation/ground_segmentation.h"
 
 
-class SegmentationNode {
+class Segmentation {
 
 private:
-  // 
+  // lidar坐标系
   std::string lidar_frame_id_;
 
   // ros句柄
@@ -51,7 +51,7 @@ private:
 
 
 public:
-  SegmentationNode(ros::NodeHandle& nh,
+  Segmentation(ros::NodeHandle& nh,
                    const std::string& ground_topic,
                    const std::string& obstacle_topic,
                    const GroundSegmentationParams& params,
@@ -73,11 +73,11 @@ public:
 
 /**
  * @function: 点云消息回调
- * @param {laserCloudMsg}
+ * @param {*} laserCloudMsg
  * @return {*}
  */  
   void cloudCallback(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg);
   
 };
 
-#endif //SRC_MAX_MAPPING_SRC_GROUND_SEGMENTATION_NODE_H_
+#endif //SRC_MAX_MAPPING_SRC_SEGMENTATION_H_

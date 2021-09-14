@@ -1,25 +1,25 @@
 /*
- * @Descripttion: 
+ * @Descripttion: 1.接收原始点云消息 2.执行地面点云分割并发布地面点云和非地面点云消息
  * @version: 
  * @Author: Jiawen Ji
  * @Date: 2021-09-07 15:59:19
  * @LastEditors: Jiawen Ji
- * @LastEditTime: 2021-09-10 18:21:04
+ * @LastEditTime: 2021-09-14 18:00:15
  */
 #include <ros/ros.h>
 #include <pcl/io/ply_io.h>
 #include <pcl_ros/point_cloud.h>
 
 #include "ground_segmentation/ground_segmentation.h"
-#include "max_slam/ground_segmention_node.h"
+#include "max_slam/ground_segmention.h"
 
-void SegmentationNode::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
+void Segmentation::cloudCallback(const sensor_msgs::PointCloud2ConstPtr& laserCloudMsg) {
   cloud_mutex_.lock();
   cloud_queue_.push(laserCloudMsg);
   cloud_mutex_.unlock();
 }
 
-void SegmentationNode::run() {
+void Segmentation::run() {
   while (1)
   {
     while (!cloud_queue_.empty())
@@ -66,6 +66,8 @@ void SegmentationNode::run() {
 int main(int argc, char** argv) {
   ros::init(argc, argv, "ground_segmentation");
 
+  ROS_INFO("\033[1;32m----> Ground Segmentation Started.\033[0m");
+
   ros::NodeHandle nh("~");
 
   // Do parameter stuff.
@@ -102,15 +104,15 @@ int main(int argc, char** argv) {
   nh.param<std::string>("obstacle_output_topic", obstacle_topic, "obstacle_cloud");
   nh.param<bool>("latch", latch, false);
 
-  // SegmentationNode
-  SegmentationNode node(nh, ground_topic, obstacle_topic, params, latch);
+  // Segmentation Node
+  Segmentation node(nh, ground_topic, obstacle_topic, params, latch);
 
   // 开启点云消息回调
   ros::Subscriber cloud_sub;
-  cloud_sub = nh.subscribe(input_topic, 1, &SegmentationNode::cloudCallback, &node);
+  cloud_sub = nh.subscribe(input_topic, 1, &Segmentation::cloudCallback, &node);
 
   // 开启地面分割线程
-  std::thread seg_thread(&SegmentationNode::run, &node);
+  std::thread seg_thread(&Segmentation::run, &node);
 
   // 保证回调生效
   ros::spin();

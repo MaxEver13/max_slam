@@ -5,13 +5,64 @@
 #ifndef SRC_MAX_SLAM_INCLUDE_UTILS_COMMON_H_
 #define SRC_MAX_SLAM_INCLUDE_UTILS_COMMON_H_
 
-#include <tf/transform_datatypes.h>
+
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Dense>
-#include <pcl/point_types.h>
+
+#include <ros/ros.h>
+
+#include <std_msgs/Header.h>
 #include <std_msgs/ColorRGBA.h>
+#include <std_msgs/Float64MultiArray.h>
+#include <sensor_msgs/Imu.h>
+#include <sensor_msgs/PointCloud2.h>
+#include <sensor_msgs/NavSatFix.h>
+#include <nav_msgs/Odometry.h>
+#include <nav_msgs/Path.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
+
+#include <opencv/cv.h>
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl/search/impl/search.hpp>
+#include <pcl/range_image/range_image.h>
+#include <pcl/kdtree/kdtree_flann.h>
+#include <pcl/common/common.h>
+#include <pcl/common/transforms.h>
+#include <pcl/registration/icp.h>
+#include <pcl/io/pcd_io.h>
+#include <pcl/filters/filter.h>
+#include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/crop_box.h> 
+#include <pcl_conversions/pcl_conversions.h>
+
+#include <tf/LinearMath/Quaternion.h>
+#include <tf/transform_listener.h>
+#include <tf/transform_datatypes.h>
+#include <tf/transform_broadcaster.h>
+ 
+#include <vector>
+#include <cmath>
+#include <algorithm>
+#include <queue>
+#include <deque>
+#include <iostream>
+#include <fstream>
+#include <ctime>
+#include <cfloat>
+#include <iterator>
+#include <sstream>
+#include <string>
+#include <limits>
+#include <iomanip>
+#include <array>
+#include <thread>
+#include <mutex>
 
 using namespace Eigen;
+using namespace std;
 
 typedef pcl::PointXYZI PointT;
 
@@ -22,9 +73,6 @@ inline double rad2deg(double radians) {
 inline double deg2rad(double degrees) {
   return degrees * M_PI / 180.0;
 }
-
-/* 下采样的点云网格大小 */
-extern double filter_size = 0.5;
 
 struct Pose6D {
   double x;
@@ -145,12 +193,11 @@ extern Pose6D Odom2Pose6D(const nav_msgs::Odometry::ConstPtr _odom) {
   return Pose6D{tx, ty, tz, roll, pitch, yaw};
 }
 
-/*
-extern Eigen::Isometry3d Pose6D2Isom3d(const Pose6D &pose_6_d){
-
-
+template<typename T>
+double ROS_TIME(T msg)
+{
+    return msg->header.stamp.toSec();
 }
-*/
 
 
 // 定义常用颜色

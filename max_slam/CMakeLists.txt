@@ -5,11 +5,6 @@ message("Compiler version is: ${CMAKE_SYSTEM_VERSION}")
 message("System version is: ${CMAKE_SYSTEM_NAME}")
 message("Architecture is: ${CMAKE_SYSTEM_PROCESSOR}")
 
-if ("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
-    set(CMAKE_CXX_COMPILER clang++)
-    set(CMAKE_C_COMPILER clang)
-    set(MACOSX TRUE)
-endif ()
 
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_STANDARD 17) 
@@ -44,19 +39,13 @@ find_package(catkin REQUIRED COMPONENTS
 )
 
 
-# loop info现在暂时没用
-add_message_files(FILES FloorCoeffs.msg)
-
-
 link_directories(${PCL_LIBRARY_DIRS} ${GTSAM_LIBRARY_DIRS})
 
 add_definitions(${PCL_DEFINITIONS})
 
-
-generate_messages(DEPENDENCIES std_msgs)
-
 catkin_package(
         INCLUDE_DIRS include
+        DEPENDS PCL GTSAM #添加pcl gtsam依赖
         CATKIN_DEPENDS nav_msgs roscpp tf sensor_msgs std_msgs geometry_msgs pcl_conversions
 )
 
@@ -73,8 +62,15 @@ message("PCL version: ${PCL_VERSION}")
 
 
 # 地面分割
-add_executable(ground_seg_node src/ground_segmentation_node.cpp)
+add_executable(ground_seg_node src/ground_segmentation.cpp)
 target_link_libraries(ground_seg_node ${catkin_LIBRARIES} ${PCL_LIBRARIES} linefit_ground_segmentation)
 
+# IMU预积分
+add_executable(imu_preintegration_node src/imu_preintegration.cpp)
+target_link_libraries(imu_preintegration_node ${catkin_LIBRARIES} ${PCL_LIBRARIES} gtsam)
+
+# 里程计融合
+add_executable(transform_fusion_node src/transform_fusion.cpp)
+target_link_libraries(transform_fusion_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 
