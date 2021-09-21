@@ -1,4 +1,4 @@
-n_threads: 4            # number of threads to use.
+n_threads: 9            # number of threads to use.
 
 r_min: 0.5              # minimum point distance.
 r_max: 50               # maximum point distance.

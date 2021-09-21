@@ -4,24 +4,24 @@
  * @Author: Jiawen Ji
  * @Date: 2021-09-13 15:52:58
  * @LastEditors: Jiawen Ji
- * @LastEditTime: 2021-09-14 17:45:15
+ * @LastEditTime: 2021-09-19 23:05:01
  */
 
 #include "max_slam/transform_fusion.h"
 
-TransformFusion::TransformFusion(ros::NodeHandle& nh) : nh_(nh)
+TransformFusion::TransformFusion(ros::NodeHandle& nh)
 {
-    // 获取坐标系
-    nh_.param<std::string>("lidar_frame_id", lidar_frame_, "velo_link");
-    nh_.param<std::string>("baselink_frame_id", baselink_frame_, "base_link");
-    nh_.param<std::string>("map_frame_id", map_frame_, "map");
-    nh_.param<std::string>("odometry_frame_id", odometry_frame_, "odom");
+    // 由于子类不能在初始化列表给基类成员初始化
+    // 这里采用赋值
+    nh_ = nh;
 
     //　ros topic
     nh_.param<std::string>("lidar_odom_topic_sub", lidar_odom_topic_sub_, "/lidar_mapping/odometry");
     nh_.param<std::string>("imu_odom_topic_sub", imu_odom_topic_sub_, "/odometry/imu_incremental");
     nh_.param<std::string>("imu_odom_topic_pub", imu_odom_topic_pub_, "/odometry/imu");
     nh_.param<std::string>("imu_path_topic_pub", imu_path_topic_pub_, "/imu_path");
+
+    ROS_INFO("baselinkFrame: %s", baselink_frame_.c_str());
 
     // 如果雷达坐标系跟baselink坐标系不一致
     if(lidar_frame_ != baselink_frame_)
@@ -38,15 +38,21 @@ TransformFusion::TransformFusion(ros::NodeHandle& nh) : nh_(nh)
         }
     }
 
-    lidar_odom_sub_ = nh.subscribe<nav_msgs::Odometry>(lidar_odom_topic_sub_, 5, &TransformFusion::lidarOdometryCallback, this, ros::TransportHints().tcpNoDelay());
-    imu_odom_sub_   = nh.subscribe<nav_msgs::Odometry>(imu_odom_topic_sub_, 2000, &TransformFusion::imuOdometryCallback,   this, ros::TransportHints().tcpNoDelay());
+    lidar_odom_sub_ = nh_.subscribe<nav_msgs::Odometry>(lidar_odom_topic_sub_, 5, &TransformFusion::lidarOdometryCallback, this, ros::TransportHints().tcpNoDelay());
+    imu_odom_sub_   = nh_.subscribe<nav_msgs::Odometry>(imu_odom_topic_sub_, 2000, &TransformFusion::imuOdometryCallback,   this, ros::TransportHints().tcpNoDelay());
 
-    imu_odom_pub_   = nh.advertise<nav_msgs::Odometry>(imu_odom_topic_pub_, 2000);
-    imu_path_pub_   = nh.advertise<nav_msgs::Path>(imu_path_topic_pub_, 1);
+    // 这里发布的其实是lidar odometry
+    imu_odom_pub_   = nh_.advertise<nav_msgs::Odometry>(imu_odom_topic_pub_, 2000);
+    imu_path_pub_   = nh_.advertise<nav_msgs::Path>(imu_path_topic_pub_, 1);
+}
+
+TransformFusion::~TransformFusion()
+{
+    
 }
 
 /**
- * @function: odometry转换成Eigen::Affine3f
+ * @brief: odometry转换成Eigen::Affine3f
  * @param {Odometry} odom
  * @return {*}
  */
@@ -63,7 +69,7 @@ Eigen::Affine3f TransformFusion::odom2affine(nav_msgs::Odometry odom)
 }
 
 /**
- * @function: lidar odometry消息回调函数
+ * @brief: lidar odometry消息回调函数
  * @param {nav_msgs::Odometry::ConstPtr}　odomMsg
  * @return {*}
  */
@@ -78,7 +84,7 @@ void TransformFusion::lidarOdometryCallback(const nav_msgs::Odometry::ConstPtr& 
 }
 
 /**
- * @function: 将imu预积分的odom与lidar odom融合,得到最新的lidar odom预测位姿
+ * @brief: 将imu预积分的odom与lidar odom融合,得到最新的lidar odom预测位姿
  * @param {*}　imu_odom_queue_: 注意这里保存的odom都是imu转换到lidar坐标系下的
  * @return {*}
  */
@@ -165,6 +171,7 @@ int main(int argc, char** argv)
 
     ROS_INFO("\033[1;32m----> Transform Fusion Started.\033[0m");
 
+    // 局部空间解析参数
     ros::NodeHandle nh("~");
 
     TransformFusion TF(nh);

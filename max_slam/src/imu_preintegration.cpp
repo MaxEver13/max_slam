@@ -4,25 +4,16 @@
  * @Author: Jiawen Ji
  * @Date: 2021-09-13 20:31:07
  * @LastEditors: Jiawen Ji
- * @LastEditTime: 2021-09-14 18:12:37
+ * @LastEditTime: 2021-09-19 23:10:35
  */
 
 #include "max_slam/imu_preintegration.h"
 
-IMUPreintegration::IMUPreintegration(ros::NodeHandle& nh) : nh_(nh) {
-
-    nh_.param<float>("imuAccNoise", imu_acc_noise_, 0.01);
-    nh_.param<float>("imuGyrNoise", imu_gyr_noise_, 0.001);
-    nh_.param<float>("imuAccBiasN", imu_acc_biasN_, 0.0002);
-    nh_.param<float>("imuGyrBiasN", imu_gyr_biasN_, 0.00003);
-    nh_.param<float>("imuGravity", imu_gravity_, 9.80511);
-    nh_.param<std::vector<double>>("extrinsicRot", ext_rot_v_, std::vector<double>());
-    nh_.param<std::vector<double>>("extrinsicRPY", ext_rpy_v_, std::vector<double>());
-    nh_.param<std::vector<double>>("extrinsicTrans", ext_trans_v_, std::vector<double>());
-    ext_rot_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_rot_v_.data(), 3, 3);
-    ext_rpy_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_rpy_v_.data(), 3, 3);
-    ext_trans_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_trans_v_.data(), 3, 1);
-    ext_q_ = Eigen::Quaterniond(ext_rpy_);
+IMUPreintegration::IMUPreintegration(ros::NodeHandle& nh)
+{
+    // 由于子类不能在初始化列表给基类成员初始化
+    // 这里采用赋值
+    nh_ = nh;
 
     ROS_INFO("imuAccNoise: %f, imuGyrNoise: %f, imuAccBiasN: %f, imuGyrBiasN: %f",imu_acc_noise_, imu_gyr_noise_, imu_acc_biasN_, imu_gyr_biasN_);
 
@@ -30,13 +21,10 @@ IMUPreintegration::IMUPreintegration(ros::NodeHandle& nh) : nh_(nh) {
     // lidar2Imu = gtsam::Pose3(gtsam::Rot3(1, 0, 0, 0), gtsam::Point3(ext_trans_.x(), ext_trans_.y(), ext_trans_.z()));
     // imu2Lidar = gtsam::Pose3(gtsam::Rot3(1, 0, 0, 0), gtsam::Point3(-ext_trans_.x(), -ext_trans_.y(), -ext_trans_.z()));
     lidar2Imu = gtsam::Pose3(gtsam::Rot3(ext_q_.w(), ext_q_.x(), ext_q_.y(), ext_q_.z()), gtsam::Point3(ext_trans_.x(), ext_trans_.y(), ext_trans_.z()));
-    imu2Lidar = lidar2Imu.inverse();
-    
+    imu2Lidar = lidar2Imu.inverse();    
 
-    nh_.param<std::string>("imu_topic", imu_topic_, "/imu_raw");
     nh_.param<std::string>("lidar_odom_topic_sub", lidar_odom_topic_sub_, "/lidar_mapping/odometry");
     nh_.param<std::string>("imu_odom_topic_pub", imu_odom_topic_pub_, "/odometry/imu_incremental");
-    nh_.param<std::string>("odometry_frame_id", odometry_frame_, "odom");
 
     ROS_INFO("imu_topic: %s", imu_topic_.c_str());
 
@@ -65,7 +53,7 @@ IMUPreintegration::IMUPreintegration(ros::NodeHandle& nh) : nh_(nh) {
 
 
 /**
- * @function: 重置isam2优化相关求解器，因子图模型，顶点值
+ * @brief: 重置isam2优化相关求解器，因子图模型，顶点值
  * @param {*}
  * @return {*}
  */
@@ -84,7 +72,7 @@ void IMUPreintegration::resetOptimization() {
 
 
 /**
- * @function: 重置参数变量：上次imu消息时间戳，lidar odometry优化完成标志位，系统初始化标志位
+ * @brief: 重置参数变量：上次imu消息时间戳，lidar odometry优化完成标志位，系统初始化标志位
  * @param {*}
  * @return {*}
  */
@@ -113,42 +101,6 @@ bool IMUPreintegration::failureDetection(const gtsam::Vector3& velCur, const gts
     return false;
 }
 
-/**
- * @function: 将imu原始数据转换到lidar坐标系
- * @param {sensor_msgs::Imu}
- * @return {sensor_msgs::Imu}
- */
-sensor_msgs::Imu IMUPreintegration::imuConverter(const sensor_msgs::Imu& imu_in) {
-    sensor_msgs::Imu imu_out = imu_in;
-    // rotate acceleration
-    Eigen::Vector3d acc(imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
-    acc = ext_rot_ * acc;
-    imu_out.linear_acceleration.x = acc.x();
-    imu_out.linear_acceleration.y = acc.y();
-    imu_out.linear_acceleration.z = acc.z();
-    // rotate gyroscope
-    Eigen::Vector3d gyr(imu_in.angular_velocity.x, imu_in.angular_velocity.y, imu_in.angular_velocity.z);
-    gyr = ext_rot_ * gyr;
-    imu_out.angular_velocity.x = gyr.x();
-    imu_out.angular_velocity.y = gyr.y();
-    imu_out.angular_velocity.z = gyr.z();
-    // rotate roll pitch yaw
-    // Eigen四元数是Hamilton convention 需要右乘四元数
-    Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x, imu_in.orientation.y, imu_in.orientation.z);
-    Eigen::Quaterniond q_final = q_from * ext_q_;
-    imu_out.orientation.x = q_final.x();
-    imu_out.orientation.y = q_final.y();
-    imu_out.orientation.z = q_final.z();
-    imu_out.orientation.w = q_final.w();
-
-    if (sqrt(q_final.x()*q_final.x() + q_final.y()*q_final.y() + q_final.z()*q_final.z() + q_final.w()*q_final.w()) < 0.1)
-    {
-        ROS_ERROR("Invalid quaternion, please use a 9-axis IMU!");
-        ros::shutdown();
-    }
-
-    return imu_out;
-}
 
 
 void IMUPreintegration::odometryCallback(const nav_msgs::Odometry::ConstPtr& odomMsg) {
@@ -364,7 +316,7 @@ void IMUPreintegration::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_raw) {
     std::lock_guard<std::mutex> lock(mtx_);
     // 将imu原始数据转换到lidar坐标系
     sensor_msgs::Imu thisImu = imuConverter(*imu_raw);
-    ROS_INFO("imuTime: %f", ROS_TIME(&thisImu));
+    // ROS_INFO("imuTime: %f", ROS_TIME(&thisImu));
 
     // 保存转换后的数据到队列
     imu_que_opt_.push_back(thisImu);
@@ -375,7 +327,7 @@ void IMUPreintegration::imuCallback(const sensor_msgs::Imu::ConstPtr& imu_raw) {
         return;
 
     double imuTime = ROS_TIME(&thisImu);
-    // ROS_INFO("imuTime: %f", imuTime);
+    ROS_INFO("imuTime: %f", imuTime);
     double dt = (lastImuT_imu_ < 0) ? (1.0 / 100.0) : (imuTime - lastImuT_imu_);
     lastImuT_imu_ = imuTime;
 
@@ -422,9 +374,10 @@ int main(int argc, char** argv)
 
     ROS_INFO("\033[1;32m----> IMU Preintegration Started.\033[0m");
 
+    // 局部空间解析参数
     ros::NodeHandle nh("~");
 
-    IMUPreintegration IMUPreInte(nh);
+    IMUPreintegration IMUP(nh);
 
     ros::spin();
 

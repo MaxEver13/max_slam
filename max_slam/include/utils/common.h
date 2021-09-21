@@ -1,7 +1,12 @@
-//
-// Created by xchu on 2021/5/16.
-// Modifier: Jiawen Ji 
-//
+/*
+ * @Descripttion: 
+ * @version: 
+ * @Author: Jiawen Ji
+ * @Date: 2021-09-16 15:28:01
+ * @LastEditors: Jiawen Ji
+ * @LastEditTime: 2021-09-19 23:06:42
+ */
+
 #ifndef SRC_MAX_SLAM_INCLUDE_UTILS_COMMON_H_
 #define SRC_MAX_SLAM_INCLUDE_UTILS_COMMON_H_
 
@@ -64,7 +69,123 @@
 using namespace Eigen;
 using namespace std;
 
-typedef pcl::PointXYZI PointT;
+typedef pcl::PointXYZI PointType;
+
+// 公共参数解析
+class ParamServer
+{
+public:
+    // ros句柄　全局空间解析参数
+    ros::NodeHandle nh_;
+
+    // 订阅的Topics
+    string point_cloud_topic_;
+    string imu_topic_;
+    string odom_topic_;
+    string gps_topic_;
+
+    // 坐标系
+    string lidar_frame_;
+    string baselink_frame_;
+    string odometry_frame_;
+    string map_frame_;
+
+    // Lidar Params
+    int N_SCAN;
+    int HORIZON_SCAN;
+    float LIDAR_MIN_RANGE;
+    float LIDAR_MAX_RANGE;
+
+    // IMU Params
+    float imu_acc_noise_;          // 加速度噪声标准差
+    float imu_gyr_noise_;          // 角速度噪声标准差
+    float imu_acc_biasN_;          // 加速度bias factor之间的约束噪声协方差参数
+    float imu_gyr_biasN_;          // 陀螺仪bias factor之间的约束噪声协方差参数
+    float imu_gravity_;            // 重力加速度
+
+    // LIDAR IMU EXTRINSICS
+    std::vector<double> ext_rot_v_;
+    std::vector<double> ext_rpy_v_;
+    std::vector<double> ext_trans_v_;
+    Eigen::Matrix3d ext_rot_;     // lidar与imu外参旋转：旋转矩阵表示
+    Eigen::Matrix3d ext_rpy_;     // lidar与imu外参旋转：RPY欧拉角表示
+    Eigen::Vector3d ext_trans_;   // lidar与imu外参平移向量
+    Eigen::Quaterniond ext_q_;    // lidar与imu外参旋转：四元数表示  
+
+
+
+    ParamServer()
+    {
+        nh_.param<std::string>("pointCloudTopic", point_cloud_topic_, "points_raw");
+        nh_.param<std::string>("imuTopic", imu_topic_, "imu_correct");
+        nh_.param<std::string>("odomTopic", odom_topic_, "odometry/imu");
+        nh_.param<std::string>("gpsTopic", gps_topic_, "odometry/gps");
+
+        nh_.param<std::string>("lidarFrame", lidar_frame_, "base_link");
+        nh_.param<std::string>("baselinkFrame", baselink_frame_, "base_link");
+        nh_.param<std::string>("odometryFrame", odometry_frame_, "odom");
+        nh_.param<std::string>("mapFrame", map_frame_, "map");
+
+        nh_.param<int>("N_SCAN", N_SCAN, 64);
+        nh_.param<int>("Horizon_SCAN", HORIZON_SCAN, 1800);
+        nh_.param<float>("lidarMinRange", LIDAR_MIN_RANGE, 1.0);
+        nh_.param<float>("lidarMaxRange", LIDAR_MAX_RANGE, 1000.0);
+
+        nh_.param<float>("imuAccNoise", imu_acc_noise_, 0.01);
+        nh_.param<float>("imuGyrNoise", imu_gyr_noise_, 0.001);
+        nh_.param<float>("imuAccBiasN", imu_acc_biasN_, 0.0002);
+        nh_.param<float>("imuGyrBiasN", imu_gyr_biasN_, 0.00003);
+        nh_.param<float>("imuGravity", imu_gravity_, 9.80511);
+        nh_.param<vector<double>>("extrinsicRot", ext_rot_v_, vector<double>());
+        nh_.param<vector<double>>("extrinsicRPY", ext_rpy_v_, vector<double>());
+        nh_.param<vector<double>>("extrinsicTrans", ext_trans_v_, vector<double>());
+        ext_rot_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_rot_v_.data(), 3, 3);
+        ext_rpy_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_rpy_v_.data(), 3, 3);
+        ext_trans_ = Eigen::Map<const Eigen::Matrix<double, -1, -1, Eigen::RowMajor>>(ext_trans_v_.data(), 3, 1);
+        ext_q_ = Eigen::Quaterniond(ext_rpy_);
+
+        usleep(100);
+    }
+
+
+    /**
+     * @function: 将imu原始数据转换到lidar坐标系
+     * @param {sensor_msgs::Imu}
+     * @return {sensor_msgs::Imu}
+     */
+    sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in) 
+    {
+        sensor_msgs::Imu imu_out = imu_in;
+        // rotate acceleration
+        Eigen::Vector3d acc(imu_in.linear_acceleration.x, imu_in.linear_acceleration.y, imu_in.linear_acceleration.z);
+        acc = ext_rot_ * acc;
+        imu_out.linear_acceleration.x = acc.x();
+        imu_out.linear_acceleration.y = acc.y();
+        imu_out.linear_acceleration.z = acc.z();
+        // rotate gyroscope
+        Eigen::Vector3d gyr(imu_in.angular_velocity.x, imu_in.angular_velocity.y, imu_in.angular_velocity.z);
+        gyr = ext_rot_ * gyr;
+        imu_out.angular_velocity.x = gyr.x();
+        imu_out.angular_velocity.y = gyr.y();
+        imu_out.angular_velocity.z = gyr.z();
+        // rotate roll pitch yaw
+        // Eigen四元数是Hamilton convention 需要右乘四元数
+        Eigen::Quaterniond q_from(imu_in.orientation.w, imu_in.orientation.x, imu_in.orientation.y, imu_in.orientation.z);
+        Eigen::Quaterniond q_final = q_from * ext_q_;
+        imu_out.orientation.x = q_final.x();
+        imu_out.orientation.y = q_final.y();
+        imu_out.orientation.z = q_final.z();
+        imu_out.orientation.w = q_final.w();
+
+        if (sqrt(q_final.x()*q_final.x() + q_final.y()*q_final.y() + q_final.z()*q_final.z() + q_final.w()*q_final.w()) < 0.1)
+        {
+            ROS_ERROR("Invalid quaternion, please use a 9-axis IMU!");
+            ros::shutdown();
+        }
+
+        return imu_out;
+    }
+};
 
 inline double rad2deg(double radians) {
   return radians * 180.0 / M_PI;
@@ -74,218 +195,63 @@ inline double deg2rad(double degrees) {
   return degrees * M_PI / 180.0;
 }
 
-struct Pose6D {
-  double x;
-  double y;
-  double z;
-  double roll;
-  double pitch;
-  double yaw;
-
-  Eigen::MatrixXd cov;
-
-  Pose6D() {
-    x = y = z = roll = pitch = yaw = 0.0;
-    cov.setIdentity();
-  };
-
-  Pose6D(double _x, double _y, double _z, double _roll, double _pitch, double _yaw)
-      : x(_x), y(_y), z(_z), roll(_roll), pitch(_pitch), yaw(_yaw) {
-    cov.setIdentity();
-  };
-};
-
-Pose6D operator+(const Pose6D &A, const Pose6D B) //给结构体定义加法；
-{
-  return Pose6D{A.x + B.x, A.y + B.y, A.z + B.z, A.roll + B.roll, A.pitch + B.pitch, A.yaw + B.yaw};
-}
-
-Pose6D operator-(const Pose6D &A, const Pose6D B) {
-  return Pose6D{A.x - B.x, A.y - B.y, A.z - B.z, A.roll - B.roll, A.pitch - B.pitch, A.yaw - B.yaw};
-}
-
-std::ostream &operator<<(std::ostream &out, const Pose6D &p)  //定义结构体流输出
-{
-  out << "(" << p.x << "," << p.y << "," << p.z << "," << p.roll << "," << p.pitch << "," << p.yaw << ")";
-  return out;
-}
-extern Pose6D Matrix2Pose6D(const Eigen::Matrix4d &matrix) {
-  Eigen::Vector3d pos = matrix.block<3, 1>(0, 3).matrix();
-  Eigen::Matrix3d rot = matrix.block<3, 3>(0, 0).matrix();
-  Eigen::Quaterniond quat(rot);
-
-  Pose6D p;
-  p.x = pos(0);
-  p.y = pos(1);
-  p.z = pos(2);
-  tf::Matrix3x3(tf::Quaternion(quat.x(), quat.y(), quat.z(), quat.w())).getRPY(p.roll, p.pitch, p.yaw);
-  return p;
-}
-
-extern Eigen::Isometry3d Matrix2Isometry3d(const Eigen::Matrix4d &matrix) {
-  Eigen::Vector3d pos = matrix.block<3, 1>(0, 3).matrix();
-  Eigen::Matrix3d rot = matrix.block<3, 3>(0, 0).matrix();
-  Eigen::Quaterniond quat(rot);
-
-  Eigen::Isometry3d pose_eigen = Eigen::Isometry3d::Identity();
-  pose_eigen.rotate(rot);
-  pose_eigen.pretranslate(pos);
-
-  return pose_eigen;
-}
-
-extern Pose6D Isometry3d2Pose6D(const Eigen::Isometry3d &matrix) {
-  Eigen::Matrix3d rot = matrix.rotation().matrix();
-  Eigen::Quaterniond quat(rot);
-
-  Pose6D p;
-  p.x = matrix.translation().x();
-  p.y = matrix.translation().y();
-  p.z = matrix.translation().z();
-  tf::Matrix3x3(tf::Quaternion(quat.x(), quat.y(), quat.z(), quat.w())).getRPY(p.roll, p.pitch, p.yaw);
-  return p;
-}
-
-extern Eigen::Matrix4d Pose6D2Matrix(const Pose6D p) {
-  Eigen::Translation3d tf_trans(p.x, p.y, p.z);
-  Eigen::AngleAxisd rot_x(p.roll, Eigen::Vector3d::UnitX());
-  Eigen::AngleAxisd rot_y(p.pitch, Eigen::Vector3d::UnitY());
-  Eigen::AngleAxisd rot_z(p.yaw, Eigen::Vector3d::UnitZ());
-  Eigen::Matrix4d mat = (tf_trans * rot_z * rot_y * rot_x).matrix();
-  return mat;
-}
-
-extern Eigen::Isometry3d GeometryToEigen(const nav_msgs::Odometry &pose_geo) {
-  Eigen::Isometry3d pose_eigen = Eigen::Isometry3d::Identity();
-  pose_eigen.rotate(Eigen::Quaterniond(pose_geo.pose.pose.orientation.w,
-                                       pose_geo.pose.pose.orientation.x,
-                                       pose_geo.pose.pose.orientation.y,
-                                       pose_geo.pose.pose.orientation.z));
-  pose_eigen.pretranslate(Eigen::Vector3d(pose_geo.pose.pose.position.x,
-                                          pose_geo.pose.pose.position.y,
-                                          pose_geo.pose.pose.position.z));
-  return pose_eigen;
-}
-
-extern Pose6D GeometryToPose6D(const nav_msgs::Odometry pose_geo) {
-  Eigen::Quaterniond quat(pose_geo.pose.pose.orientation.w,
-                          pose_geo.pose.pose.orientation.x,
-                          pose_geo.pose.pose.orientation.y,
-                          pose_geo.pose.pose.orientation.z);
-
-  Pose6D p;
-  p.x = pose_geo.pose.pose.position.x;
-  p.y = pose_geo.pose.pose.position.y;
-  p.z = pose_geo.pose.pose.position.z;
-  tf::Matrix3x3(tf::Quaternion(quat.x(), quat.y(), quat.z(), quat.w())).getRPY(p.roll, p.pitch, p.yaw);
-  return p;
-}
-
-extern Pose6D Odom2Pose6D(const nav_msgs::Odometry::ConstPtr _odom) {
-  auto tx = _odom->pose.pose.position.x;
-  auto ty = _odom->pose.pose.position.y;
-  auto tz = _odom->pose.pose.position.z;
-
-  double roll, pitch, yaw;
-  geometry_msgs::Quaternion quat = _odom->pose.pose.orientation;
-  tf::Matrix3x3(tf::Quaternion(quat.x, quat.y, quat.z, quat.w)).getRPY(roll, pitch, yaw);
-
-  return Pose6D{tx, ty, tz, roll, pitch, yaw};
-}
-
 template<typename T>
 double ROS_TIME(T msg)
 {
     return msg->header.stamp.toSec();
 }
 
-
-// 定义常用颜色
-enum Color : int {
-  BLACK,
-  GRAY,
-  LIGHT_RED,
-  LIGHT_GREEN,
-  LIGHT_BLUE,
-  LIGHT_YELLOW,
-  LIGHT_CYAN,
-  LIGHT_MAGENTA,
-  RED,
-  GREEN,
-  BLUE,
-  YELLOW,
-  CYAN,
-  MAGENTA,
-  WHITE
-};
-
-const double COLOR_VALUE_MIN = 0.0;
-const double COLOR_VALUE_MAX = 1.0;
-const double COLOR_VALUE_MEDIAN = 0.5;
-const double COLOR_VALUE_LIGHT_LOW = 0.56;
-const double COLOR_VALUE_LIGHT_HIGH = 0.93;
-
-std_msgs::ColorRGBA createColorRGBA(Color color) {
-  std_msgs::ColorRGBA color_rgba;
-  color_rgba.r = COLOR_VALUE_MIN;
-  color_rgba.g = COLOR_VALUE_MIN;
-  color_rgba.b = COLOR_VALUE_MIN;
-  color_rgba.a = COLOR_VALUE_MAX;
-
-  switch (color) {
-    case BLACK:break;
-    case GRAY:color_rgba.r = COLOR_VALUE_MEDIAN;
-      color_rgba.g = COLOR_VALUE_MEDIAN;
-      color_rgba.b = COLOR_VALUE_MEDIAN;
-      break;
-    case LIGHT_RED:color_rgba.r = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.g = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.b = COLOR_VALUE_LIGHT_LOW;
-      break;
-    case LIGHT_GREEN:color_rgba.r = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.g = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.b = COLOR_VALUE_LIGHT_LOW;
-      break;
-    case LIGHT_BLUE:color_rgba.r = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.g = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.b = COLOR_VALUE_LIGHT_HIGH;
-      break;
-    case LIGHT_YELLOW:color_rgba.r = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.g = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.b = COLOR_VALUE_LIGHT_LOW;
-      break;
-    case LIGHT_CYAN:color_rgba.r = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.g = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.b = COLOR_VALUE_LIGHT_HIGH;
-      break;
-    case LIGHT_MAGENTA:color_rgba.r = COLOR_VALUE_LIGHT_HIGH;
-      color_rgba.g = COLOR_VALUE_LIGHT_LOW;
-      color_rgba.b = COLOR_VALUE_LIGHT_HIGH;
-      break;
-    case RED:color_rgba.r = COLOR_VALUE_MAX;
-      break;
-    case GREEN:color_rgba.g = COLOR_VALUE_MAX;
-      break;
-    case BLUE:color_rgba.b = COLOR_VALUE_MAX;
-      break;
-    case YELLOW:color_rgba.r = COLOR_VALUE_MAX;
-      color_rgba.g = COLOR_VALUE_MAX;
-      break;
-    case CYAN:color_rgba.g = COLOR_VALUE_MAX;
-      color_rgba.b = COLOR_VALUE_MAX;
-      break;
-    case MAGENTA:color_rgba.r = COLOR_VALUE_MAX;
-      color_rgba.b = COLOR_VALUE_MAX;
-      break;
-    case WHITE:color_rgba.r = COLOR_VALUE_MAX;
-      color_rgba.g = COLOR_VALUE_MAX;
-      color_rgba.b = COLOR_VALUE_MAX;
-      break;
-    default:color_rgba.a = COLOR_VALUE_MIN; // hide color from view
-      break;
-  }
-
-  return color_rgba;
+template<typename T>
+void imuAngular2rosAngular(sensor_msgs::Imu *thisImuMsg, T *angular_x, T *angular_y, T *angular_z)
+{
+    *angular_x = thisImuMsg->angular_velocity.x;
+    *angular_y = thisImuMsg->angular_velocity.y;
+    *angular_z = thisImuMsg->angular_velocity.z;
 }
 
-#endif //SRC_XCHU_MAPPING_INCLUDE_XCHU_MAPPING_COMMON_H_
+
+template<typename T>
+void imuAccel2rosAccel(sensor_msgs::Imu *thisImuMsg, T *acc_x, T *acc_y, T *acc_z)
+{
+    *acc_x = thisImuMsg->linear_acceleration.x;
+    *acc_y = thisImuMsg->linear_acceleration.y;
+    *acc_z = thisImuMsg->linear_acceleration.z;
+}
+
+
+template<typename T>
+void imuRPY2rosRPY(sensor_msgs::Imu *thisImuMsg, T *rosRoll, T *rosPitch, T *rosYaw)
+{
+    double imuRoll, imuPitch, imuYaw;
+    tf::Quaternion orientation;
+    tf::quaternionMsgToTF(thisImuMsg->orientation, orientation);
+    tf::Matrix3x3(orientation).getRPY(imuRoll, imuPitch, imuYaw);
+
+    *rosRoll = imuRoll;
+    *rosPitch = imuPitch;
+    *rosYaw = imuYaw;
+}
+
+float pointDistance(PointType p)
+{
+    return sqrt(p.x*p.x + p.y*p.y + p.z*p.z);
+}
+
+
+float pointDistance(PointType p1, PointType p2)
+{
+    return sqrt((p1.x-p2.x)*(p1.x-p2.x) + (p1.y-p2.y)*(p1.y-p2.y) + (p1.z-p2.z)*(p1.z-p2.z));
+}
+
+sensor_msgs::PointCloud2 publishCloud(ros::Publisher *thisPub, pcl::PointCloud<PointType>::Ptr thisCloud, ros::Time thisStamp, std::string thisFrame)
+{
+    sensor_msgs::PointCloud2 tempCloud;
+    pcl::toROSMsg(*thisCloud, tempCloud);
+    tempCloud.header.stamp = thisStamp;
+    tempCloud.header.frame_id = thisFrame;
+    if (thisPub->getNumSubscribers() != 0)
+        thisPub->publish(tempCloud);
+    return tempCloud;
+}
+
+#endif //SRC_MAX_SLAM_INCLUDE_UTILS_COMMON_H_

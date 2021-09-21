@@ -4,7 +4,7 @@
  * @Author: Jiawen Ji
  * @Date: 2021-09-13 14:50:16
  * @LastEditors: Jiawen Ji
- * @LastEditTime: 2021-09-14 17:49:00
+ * @LastEditTime: 2021-09-19 22:57:30
  */
 
 #ifndef SRC_MAX_MAPPING_SRC_IMU_PREINTEGRATION_H_
@@ -32,36 +32,16 @@ using gtsam::symbol_shorthand::X; // Pose3 (x,y,z,r,p,y)
 using gtsam::symbol_shorthand::V; // Vel   (xdot,ydot,zdot)
 using gtsam::symbol_shorthand::B; // Bias  (ax,ay,az,gx,gy,gz)
 
-class IMUPreintegration {
+class IMUPreintegration : public ParamServer 
+{
 private:
     
     std::mutex mtx_;
 
-    // IMU参数
-    float imu_acc_noise_;          // 加速度噪声标准差
-    float imu_gyr_noise_;          // 角速度噪声标准差
-    float imu_acc_biasN_;          // 加速度bias factor之间的约束噪声协方差参数
-    float imu_gyr_biasN_;          // 陀螺仪bias factor之间的约束噪声协方差参数
-    float imu_gravity_;            // 重力加速度
-    std::vector<double> ext_rot_v_;
-    std::vector<double> ext_rpy_v_;
-    std::vector<double> ext_trans_v_;
-    Eigen::Matrix3d ext_rot_;     // lidar与imu外参旋转：旋转矩阵表示
-    Eigen::Matrix3d ext_rpy_;     // lidar与imu外参旋转：RPY欧拉角表示
-    Eigen::Vector3d ext_trans_;   // lidar与imu外参平移向量
-    Eigen::Quaterniond ext_q_;    // lidar与imu外参旋转：四元数表示
-
     // ros topic
-    std::string imu_topic_;
     std::string lidar_odom_topic_sub_;
     std::string imu_odom_topic_pub_;
 
-    // odometry坐标系
-    std::string odometry_frame_;
-
-
-    // ros句柄
-    ros::NodeHandle nh_;
     // 订阅imu数据
     ros::Subscriber imu_sub_;
     // 订阅lidar odometry
@@ -135,8 +115,6 @@ private:
     void resetParams();
 
     bool failureDetection(const gtsam::Vector3& velCur, const gtsam::imuBias::ConstantBias& biasCur);
-
-    sensor_msgs::Imu imuConverter(const sensor_msgs::Imu& imu_in);
  
 };
 

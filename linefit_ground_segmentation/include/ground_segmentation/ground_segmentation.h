@@ -6,7 +6,7 @@
 #include <glog/logging.h>
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
-#include <pcl/visualization/pcl_visualizer.h>
+
 
 #include "ground_segmentation/segment.h"
 
@@ -57,7 +57,7 @@ struct GroundSegmentationParams {
   int n_threads;
 };
 
-typedef pcl::PointCloud<pcl::PointXYZ> PointCloud;
+typedef pcl::PointCloud<pcl::PointXYZI> PointCloud;
 
 typedef std::pair<pcl::PointXYZ, pcl::PointXYZ> PointLine;
 
@@ -74,9 +74,6 @@ class GroundSegmentation {
   // 2D coordinates (d, z) of every point in its respective segment.
   std::vector<Bin::MinZPoint> segment_coordinates_;
 
-  // Visualizer.
-  std::shared_ptr<pcl::visualization::PCLVisualizer> viewer_;
-
   void assignCluster(std::vector<int>* segmentation);
 
   void assignClusterThread(const unsigned int& start_index,
@@ -89,23 +86,10 @@ class GroundSegmentation {
                        const size_t start_index,
                        const size_t end_index);
 
-  void getMinZPoints(PointCloud* out_cloud);
-
   void getLines(std::list<PointLine>* lines);
 
   void lineFitThread(const unsigned int start_index, const unsigned int end_index,
                      std::list<PointLine> *lines, std::mutex* lines_mutex);
-
-  pcl::PointXYZ minZPointTo3d(const Bin::MinZPoint& min_z_point, const double& angle);
-
-  void getMinZPointCloud(PointCloud* cloud);
-
-  void visualizePointCloud(const PointCloud::ConstPtr& cloud,
-                           const std::string& id = "point_cloud");
-
-  void visualizeLines(const std::list<PointLine>& lines);
-
-  void visualize(const std::list<PointLine>& lines, const PointCloud::ConstPtr& cloud, const PointCloud::ConstPtr& ground_cloud, const PointCloud::ConstPtr& obstacle_cloud);
 
 public:
 

@@ -43,10 +43,26 @@ link_directories(${PCL_LIBRARY_DIRS} ${GTSAM_LIBRARY_DIRS})
 
 add_definitions(${PCL_DEFINITIONS})
 
+# 添加点云消息
+add_message_files(
+  DIRECTORY msg
+  FILES
+  cloud_info.msg
+)
+
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs
+  nav_msgs
+  sensor_msgs
+)
+
 catkin_package(
         INCLUDE_DIRS include
         DEPENDS PCL GTSAM #添加pcl gtsam依赖
-        CATKIN_DEPENDS nav_msgs roscpp tf sensor_msgs std_msgs geometry_msgs pcl_conversions
+        CATKIN_DEPENDS nav_msgs roscpp tf sensor_msgs std_msgs geometry_msgs pcl_conversions  message_runtime
+        message_generation
 )
 
 include_directories(
@@ -62,7 +78,7 @@ message("PCL version: ${PCL_VERSION}")
 
 
 # 地面分割
-add_executable(ground_seg_node src/ground_segmentation.cpp)
+add_executable(ground_seg_node src/ground_seg.cpp)
 target_link_libraries(ground_seg_node ${catkin_LIBRARIES} ${PCL_LIBRARIES} linefit_ground_segmentation)
 
 # IMU预积分
@@ -72,5 +88,9 @@ target_link_libraries(imu_preintegration_node ${catkin_LIBRARIES} ${PCL_LIBRARIE
 # 里程计融合
 add_executable(transform_fusion_node src/transform_fusion.cpp)
 target_link_libraries(transform_fusion_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
+
+# 点云去畸变
+add_executable(image_projection_node src/image_projection.cpp)
+target_link_libraries(image_projection_node ${catkin_LIBRARIES} ${PCL_LIBRARIES})
 
 
